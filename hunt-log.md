@@ -600,3 +600,24 @@ decompiles only the first; repeats of `-postScript BigDecomp.java <addr>` are th
   or copied value whose low nibble is not fixed by the code, and the three publish-driver sites pass
   `(CString, 0, 0)`, i.e. the "no numbers" form. The 1–8 payload table is unreachable without objects
   that carry those nibbles.
+
+## 30. ActionScript: two surfaces, and what the panel never documented
+
+The authoring tool carries its own ActionScript engine, separate from the SWF writer: the interpreter
+sits at `0x78f000`-`0x79f000`, the writer at `0x7a0000`.
+
+- The Actions panel's reference is an XML file in `.rsrc` (`0xf40000`-`0xf60000`) with 491
+  `<string>` entries: 285 members over 17 objects plus 206 global/operator entries, each gated to
+  version 4, 5 or 6.
+- `FUN_0079c200` (437 B) bootstraps the engine: allocates the 0x468-byte interpreter object,
+  installs `ASnative` as a global bound to `LAB_00402040` (a thunk into `0x79c170`) at `0x79c2ad`,
+  and computes `NaN` and `Infinity` instead of storing them as constants.
+- `FUN_0079c430` (1544 B) is the call/construct path: it writes `__proto__` onto the new object
+  (`0x79c559`), sets `constructor`, builds `arguments` carrying `callee` (`0x79c7f1`), and pads the
+  argument list to the callee's declared arity with `undefined`.
+- `FUN_0078fa30` (774 B) resolves properties: watch list first, then a separate table for names
+  beginning with `_`, then the prototype chain, then a `MovieClip` fallback.
+- `FUN_00794680` (173 B) walks `__proto__` with a depth budget of 6.
+- Negative: `ASSetPropFlags`, `isPropertyEnumerable`, `propertyIsEnumerable` and `isPrototypeOf`
+  have zero occurrences in the image - ASCII, UTF-16 and reference XML alike, so the authoring
+  engine is a subset of the player's AVM1.

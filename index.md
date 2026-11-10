@@ -36,6 +36,13 @@ itself as an observation or an inference.
     <a href="{{ '/writer/' | relative_url }}">Read →</a>
   </li>
   <li>
+    <h3>ActionScript</h3>
+    <p>The authoring tool's own engine: the core-object surface its panel documents, and the
+    runtime features it never mentions — <code>ASnative</code>, <code>__proto__</code> on
+    construction, argument padding.</p>
+    <a href="{{ '/actionscript/' | relative_url }}">Read →</a>
+  </li>
+  <li>
     <h3>Hunt log</h3>
     <p>The chronological record: the false starts, the thunk problem, the corpus
     checks, and what each suspicious address turned out to be.</p>
