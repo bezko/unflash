@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% if page.title %}{{ page.title }} · {{ site.title }}{% else %}{{ site.title }}{% endif %}</title>
+  <meta name="description" content="{{ page.description | default: site.description | strip_newlines }}">
+  <link rel="stylesheet" href="{{ '/assets/css/style.css' | relative_url }}">
+</head>
+<body>
+  <header class="site">
+    <div class="wrap">
+      <a class="brand" href="{{ '/' | relative_url }}">unflash</a>
+      <nav>
+        <a href="{{ '/format/' | relative_url }}"{% if page.url contains '/format' %} class="active"{% endif %}>Format</a>
+        <a href="{{ '/writer/' | relative_url }}"{% if page.url contains '/writer' %} class="active"{% endif %}>Writer API</a>
+        <a href="{{ '/hunt-log/' | relative_url }}"{% if page.url contains '/hunt-log' %} class="active"{% endif %}>Hunt log</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    {% if page.url != '/' %}<h1>{{ page.title }}</h1>{% endif %}
+    {{ content }}
+  </main>
+
+  <footer class="site">
+    <div class="wrap">
+      <p>{{ site.title }} — reverse-engineering notes. No application binaries or installer
+      contents are redistributed here; every claim is tied to an address in a
+      locally-owned copy of the software.</p>
+    </div>
+  </footer>
+</body>
+</html>

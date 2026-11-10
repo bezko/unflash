@@ -1,0 +1,26 @@
+title: unflash
+tagline: Notes on the internals of Macromedia Flash
+description: >-
+  Reverse-engineering notes on the Macromedia Flash MX SWF exporter: the container
+  format, the recovered writer API, and the hunt log behind both.
+
+url: "https://bezko.github.io"
+baseurl: "/unflash"
+
+markdown: kramdown
+kramdown:
+  input: GFM
+  hard_wrap: false
+  auto_ids: true
+
+defaults:
+  - scope:
+      path: ""
+    values:
+      layout: default
+
+exclude:
+  - README.md
+  - Gemfile
+  - Gemfile.lock
+  - vendor

@@ -1,0 +1,246 @@
+:root {
+  --bg: #fbfaf8;
+  --fg: #1d1c1a;
+  --muted: #6b6761;
+  --rule: #e4dfd6;
+  --accent: #a83c25;
+  --code-bg: #f2eee7;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #15150f;
+    --fg: #e9e5db;
+    --muted: #a29c8f;
+    --rule: #302e26;
+    --accent: #e78a63;
+    --code-bg: #201f19;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html {
+  font-size: 17px;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  line-height: 1.62;
+}
+
+.wrap {
+  max-width: 54rem;
+  margin: 0 auto;
+  padding: 0 1.25rem;
+}
+
+/* header */
+
+header.site {
+  border-bottom: 1px solid var(--rule);
+  background: var(--bg);
+  position: sticky;
+  top: 0;
+}
+
+header.site .wrap {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.4rem 1.4rem;
+  padding: 0.85rem 1.25rem;
+}
+
+.brand {
+  font-family: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  font-weight: 700;
+  font-size: 1.05rem;
+  letter-spacing: 0.02em;
+  color: var(--fg);
+  text-decoration: none;
+}
+
+.brand::before {
+  content: "▚ ";
+  color: var(--accent);
+}
+
+nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.1rem;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 0.86rem;
+  letter-spacing: 0.01em;
+}
+
+nav a {
+  color: var(--muted);
+  text-decoration: none;
+  padding-bottom: 1px;
+  border-bottom: 1px solid transparent;
+}
+
+nav a:hover,
+nav a.active {
+  color: var(--fg);
+  border-bottom-color: var(--accent);
+}
+
+/* body text */
+
+main {
+  padding: 2.2rem 1.25rem 3rem;
+}
+
+h1, h2, h3, h4 {
+  line-height: 1.25;
+  font-weight: 600;
+  margin: 2.1em 0 0.6em;
+}
+
+h1 {
+  font-size: 1.95rem;
+  letter-spacing: -0.015em;
+  margin-top: 0.4em;
+}
+
+h2 {
+  font-size: 1.35rem;
+  letter-spacing: -0.01em;
+  padding-bottom: 0.25rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+h3 { font-size: 1.08rem; }
+h4 { font-size: 1rem; color: var(--muted); }
+
+p, ul, ol { margin: 0.9em 0; }
+
+ul, ol { padding-left: 1.3em; }
+
+li { margin: 0.3em 0; }
+
+a { color: var(--accent); }
+
+hr {
+  border: 0;
+  border-top: 1px solid var(--rule);
+  margin: 2.4em 0;
+}
+
+blockquote {
+  margin: 1.2em 0;
+  padding: 0.1em 0 0.1em 1em;
+  border-left: 3px solid var(--accent);
+  color: var(--muted);
+}
+
+code, kbd, samp {
+  font-family: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  font-size: 0.855em;
+  background: var(--code-bg);
+  border-radius: 3px;
+  padding: 0.1em 0.32em;
+}
+
+pre {
+  background: var(--code-bg);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  padding: 0.9rem 1rem;
+  overflow-x: auto;
+  line-height: 1.5;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.82em;
+  white-space: pre;
+}
+
+table {
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+  border-collapse: collapse;
+  margin: 1.2em 0;
+  font-size: 0.9rem;
+}
+
+th, td {
+  border: 1px solid var(--rule);
+  padding: 0.4rem 0.6rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+th { background: var(--code-bg); font-weight: 600; }
+
+/* landing page */
+
+.lead {
+  font-size: 1.12rem;
+  color: var(--muted);
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 1rem;
+  margin: 1.8rem 0 2.4rem;
+  padding: 0;
+  list-style: none;
+}
+
+.cards li {
+  margin: 0;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  padding: 1rem 1.1rem;
+  background: var(--code-bg);
+}
+
+.cards h3 {
+  margin: 0 0 0.35rem;
+  font-size: 1rem;
+}
+
+.cards p {
+  margin: 0 0 0.6rem;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.cards a {
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 0.84rem;
+  text-decoration: none;
+}
+
+.cards a:hover { text-decoration: underline; }
+
+.meta {
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+/* footer */
+
+footer.site {
+  border-top: 1px solid var(--rule);
+  padding: 1.4rem 0 2.4rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+footer.site .wrap { padding: 0 1.25rem; }
+
+footer.site p { margin: 0; }
