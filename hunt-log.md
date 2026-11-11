@@ -693,3 +693,33 @@ sits at `0x78f000`-`0x79f000`, the writer at `0x7a0000`.
 - `On2`: the lone byte hit sits inside a `call rel32` operand, not a codec name.
 - `FLV`: no version-1 signature and no `MFLV` immediate anywhere in the image; `MFLV` exists only in
   the UTF-16 import filter list. This build does not write an FLV container.
+
+## 34. Tag 38's flag, the 5.5 kHz case, and where the ADPCM depth goes
+
+Four open questions fell to a short stretch of disassembly, and one published claim was wrong.
+
+- **Tag 38's byte is a constant zero.** `0x659113 push 0x26` gives `beginTag(38, long)`, then
+  `put16(id)`, then `strlen` + `putmem(name)`, then `push 0` into `put8`. Both sides of
+  `cmp [ebp+0x110],6 / jl 0x65919b` write the same three fields and the same zero; the compare only
+  selects how the name is fetched (`lea` of `+0x88` versus the pointer stored there). The 0/1/2
+  mapping previously placed here is tag 60's codec byte at `0x65924f` (`dec esi; je -> 1`,
+  `dec; je -> 2`, else 0), 300 bytes further on and already described for tag 60. Retraction: "a
+  `UI8` that takes 0, 1 or 2 from three converging paths … not version-gated".
+- **The head's tag selector is the codec code.** `(-(code != 0) & 0xffffffe5) + 0x2d`: code 0 (None)
+  gives tag 45, every compressed code gives 18 — so MP3 takes the older tag while still writing the
+  latency word `put16([handle+4])`, the inverse of why `SoundStreamHead2` exists.
+- **5.5 kHz is not an MPEG Layer-3 rate.** 5512 is the only entry in the rate table outside the
+  MPEG-1/2/2.5 sets, and the code routes MP3 codes back through the ADPCM arithmetic exactly there.
+  The two sites differ by one code: `DefineSound` takes `< 0x12` (through 160 kbps), the head `< 0x11`.
+- **The depth never reaches the header.** `0x418b83` builds `flags & 0xffffff0f | 2`, then `| 0x10`:
+  compression 1 (ADPCM) plus the 16-bit bit. The depth is the encoder's third argument and stops
+  there, so 2-bit and 5-bit streams are indistinguishable in the tag. Uncompressed 16-bit at SWF >= 4
+  becomes compression 3 (little-endian) in both emitters.
+- **Head and blocks cannot disagree.** The head stores the code at `+0x27c`, the format byte at
+  `+0x248`, the MP3 handle at `+0x280`, the sample count at `+0x24c` and the config at `+0x244` /
+  `+0x260`; `FUN_007a38f0` branches on `+0x27c` and `FUN_007a3a70` reads `[handle+4]`.
+- **The depth table is not monotonic.** `0x7a3334` holds six code pointers rather than constants —
+  `0x7a3002, 0x7a303b, 0x7a3002, 0x7a302d, 0x7a3034, 0x7a303b` — which load depths
+  `[2, 5, 2, 3, 4, 5]` with 5 as the default. Quotient 1 therefore gets the widest depth.
+
+The format reference's gap list also needed a note: tag 38 is not unused, it is internal.

@@ -43,7 +43,7 @@ whose tag number is computed rather than literal (§3.6).
 | SWF video codec | H.263 (Sorenson Spark) only | `CVideoImport::H263Player`/`H263Consumer`; no VP6 strings |
 | Video in SWF below version 6 | refused, object dropped | `cmp [ebp+0x110],5` at `0x6591d2` |
 | MP3 in SWF outside 6–17 | refused | `0x7a2f48`, `0x7a2f4d`; budget table ends at 17 |
-| Streaming sound head tag (18/45) | yes — one emitter, tag computed | `FUN_007a3470`, §3.6 |
+| Streaming sound head tag (18/45) | yes — one emitter, tag from the codec | `FUN_007a3470`, §3.6 |
 | Camera / microphone capture | no authoring path | player-side natives only, §5.5 |
 
 ---
@@ -165,12 +165,43 @@ as data rather than inferred:
 ```
 
 The quotient is `2 × bitrate(version) / (sampleRate × channels)` — a bits-per-sample figure with a
-factor of two in it — and the six-entry jump table at `0x7a3334` maps it to a depth: index 0 and 2 to
-2-bit, 3 to 3-bit, 4 to 4-bit, 1 and 5 to 5-bit, with anything above 5 clamped to 5. **Inference:**
-the doubling reads like deliberate headroom, but a units error would look identical here; what is
-certain is that the depth comes from the rate and the version, and never from the dialog's dropdown
-value. The 5.5 kHz entry is additionally tested on its own (`0x7a2fb6`), and when the rate is not
-5512 Hz and the writer's header version is ≥ 4, control leaves the arithmetic path entirely.
+factor of two in it — and the six-entry jump table at `0x7a3334` maps it to a depth. The table's
+entries are code addresses rather than constants, so it has to be read in two steps: dump the six
+pointers, then disassemble each target. Decoded that way the map is
+
+| quotient | 0 | 1 | 2 | 3 | 4 | 5 | > 5 |
+|---|---|---|---|---|---|---|---|
+| depth | 2 | 5 | 2 | 3 | 4 | 5 | 5 |
+
+which is **not monotonic**: a quotient of 1 yields the widest depth, the same 5 bits that quotients
+of 5 and above get. The quotient is a small integer, so 1 is reachable; whether the entry is a floor
+or a leftover is not visible in the code.
+
+Two further facts about the depth matter more than its value:
+
+- **It never reaches the header.** The ADPCM writer at `0x418b83` builds the compression byte as
+  `flags & 0xffffff0f | 2`, then `| 0x10` — compression id **1** (ADPCM) with the 16-bit size bit
+  set — so a 2-bit and a 5-bit stream are indistinguishable in the tag. SWF has one ADPCM id and this
+  writer does not extend it; the depth is the encoder's third argument and stops there.
+- **Uncompressed 16-bit is written as compression 3.** When the writer's header version is ≥ 4 and
+  the 16-bit flag is set, the byte becomes `flags & 0xf0 | 0x30` — compression 3, uncompressed
+  little-endian, the SWF 4+ form. 8-bit uncompressed keeps id 0. The same rule appears in both
+  `DefineSound` and the head, which is the clearest sign the two were written together.
+
+**Inference:** the doubling reads like deliberate headroom, but a units error would look identical
+here; what is certain is that the depth comes from the rate and the version, and never from the
+dialog's dropdown value. The 5.5 kHz entry is additionally tested on its own (`0x7a2fb6`), and when
+the rate is not 5512 Hz and the writer's header version is ≥ 4, control leaves the arithmetic path
+entirely.
+
+**Why that one rate.** 5512 Hz is the only entry in the table that is not an MPEG Layer-3 sample
+rate — MPEG-1 takes 32/44.1/48 kHz, MPEG-2 16/22.05/24 kHz, MPEG-2.5 8/11.025/12 kHz, and 5.5 kHz is
+in none of them. The code acts on exactly that: at 5512 Hz it re-enters the ADPCM arithmetic even for
+MP3 codes, so an MP3 request is silently replaced by a computed ADPCM depth. The two call sites put
+the boundary one code apart — `DefineSound` sends codes below `0x12` (through 160 kbps) back through
+the arithmetic, the head only below `0x11` (through 128 kbps) — so at 5.5 kHz the 160 kbps choice is
+converted for an event sound and left as MP3 for a stream sound. **Inference:** the rate argument is
+structural, the one-code disagreement is not obviously intended.
 
 ### 3.5 `StartSound` (15): `0x653e07`
 
@@ -215,10 +246,17 @@ add eax,0x2d                 ; 0x2d = 45, or 0xe5 + 0x2d = 0x12 = 18
 call beginTag                ; long-form flag = 0, so the short header
 ```
 
-A zero selector writes **tag 45 `SoundStreamHead2`**; a non-zero selector writes **tag 18
-`SoundStreamHead`**, the older form without MP3 fields. That is the split the SWF 6 format
-description makes, arrived at by arithmetic instead of two code paths — which is why a scan for the
-literals `0x12` and `0x2d` never found it.
+The selector is not a separate flag: it is the **compression code itself**, the same argument the
+body later stores at `[writer+0x27c]`. So an uncompressed stream (code 0) is written as **tag 45
+`SoundStreamHead2`**, and every compressed one — ADPCM 2–5, MP3 6–17, speech 18 and up — as **tag 18
+`SoundStreamHead`**. That is the split, arrived at by arithmetic instead of two code paths, which is
+why a scan for the literals `0x12` and `0x2d` never found it.
+
+It also runs against the spec's rationale. `SoundStreamHead2` exists to carry the MP3 latency word,
+yet here MP3 is the case that gets the *older* tag — and the MP3 branch still writes those two bytes
+(`put16` of the encoder's field at `[handle+4]`), so an MP3 head is a tag 18 body followed by a word
+its definition does not list. Whether a player ignores the two bytes is untested; nothing in this
+image parses its own output that way.
 
 The body then branches on a codec code at `[+0x27c]`: 2–5 are the ADPCM depths from §3.4; 6–17 index
 the MP3 quality ladder (`thunk_FUN_0067b2a0` is called with `code - 6`); and anything above 17 takes
@@ -355,12 +393,20 @@ if ([esp+0x34] != 0 && [esp+0x30] != 0) {     payload present
 Note the asymmetry: the frame counter advances even when no tag is written, so a dropped frame is
 silent — the movie's frame numbering can skip with no record of the gap.
 
-### 4.5 Tag 38, the video record
+### 4.5 Tag 38, the private video record
 
-`0x65911b`, guarded by `IsKindOf(CMediaVideo)`: `UI16`, then the name written with `putmem` and an
-explicit `strlen` (**no NUL terminator**, the only STRING field in this writer without one), then a
-`UI8` that takes 0, 1 or 2 from three converging paths. Unlike tag 60 it is **not** version-gated.
-What the flag selects is unknown.
+`0x65911b`, behind two `IsKindOf` tests in sequence: `beginTag(0x26, 1)` — long header, tag **38** —
+then `UI16` id from the same counter tag 60 uses, then the name via `strlen` + `putmem` (**no NUL
+terminator**, the only STRING field in this writer without one), then a single `UI8`.
+
+That byte is **always 0** in this build, on both sides of the `cmp [ebp+0x110],6 / jl`: the compare
+is present, but it only chooses how the name is fetched (the address of an inline buffer at `+0x88`
+versus the pointer stored there), so tag 38 is not version-gated in effect. An earlier note here put
+a 0/1/2 flag in this record; that was wrong — the 1/2/0 mapping belongs to tag 60's codec byte at
+`0x65924f`, 300 bytes further on, and is already described in §4.3.
+
+Tag 38 is a gap in the public tag list (the format reference lists it among the unused numbers), so
+this is a Macromedia-private record: an id, a name, and a zero. What reads it is unknown.
 
 ---
 
@@ -378,13 +424,19 @@ Spark.
 No AAC, no ADPCM-with-alpha, no 8/48 kHz, and the speech codec has no name beyond "Speech sound".
 The encoder-compression set is exactly: none, ADPCM 2–5 bit, MP3 8–160 kbps.
 
-### 5.3 Streaming sound is written but unverified
+### 5.3 Streaming: head and blocks share their state
 
-There is a head writer (`FUN_007a3470`, §3.6) and five block emitters, all reached from the frame
-sound compiler, and the head call receives a real configuration. What is *not* verified is whether
-the resulting stream is self-consistent: nothing here exercises a streaming export, and no shipped
-movie contains tags 18, 19 or 45, so there is no sample to compare the head against the blocks it
-frames.
+The head (`FUN_007a3470`, §3.6) does not write bytes and forget: it stores the compression code at
+`[writer+0x27c]`, the packed format byte at `+0x248`, the MP3 encoder handle at `+0x280`, the sample
+count at `+0x24c`, and two 28-byte copies of the config at `+0x244` and `+0x260`. The block emitters
+read exactly those fields — `FUN_007a38f0` branches on `[+0x27c]` (uncompressed computes a size from
+the flags, anything else hands the payload to the codec through `0x772c80`), and `FUN_007a3a70`
+writes `[handle+4]` from `+0x280` as its 16-bit word.
+
+So head and blocks cannot disagree about *which* codec or *how many* samples: it is one stored code,
+written once and read twice. What remains unverified is whether a player accepts the resulting
+tag/field combination — in particular the MP3 case in §3.6, where the older head tag carries the
+latency word. No shipped movie contains tags 18, 19 or 45, so there is no sample to check against.
 
 ### 5.4 No capture path in the exporter
 
@@ -418,14 +470,14 @@ even though its `<string>` reference entries cover only some of them.
 
 ## 6. Open questions
 
-- **Whether the head's flags match its blocks.** The call itself is understood now (§3.6): a merged
-  rate word, a config struct, a codec code. What stays unverified is whether that combination writes a
-  self-consistent stream, because no sample carries tags 18, 19 or 45.
-- **Why 5.5 kHz is special-cased** in both `DefineSound` (`0x7a2fb6`) and the head writer
-  (`0x7a34da`), leaving the arithmetic path whenever the rate is not 5512 Hz.
-- **Whether the ADPCM factor of two** is deliberate headroom or a units error. The tables and the
-  jump table are read now (§3.4); the intent is not.
-- **What tag 38's `UI8` selects** (0, 1, 2) and why a video record exists beside tag 60.
+- **Whether a player tolerates an MP3 stream under tag 18.** The head writes the latency word anyway
+  (§3.6); whether it is ignored or shifts the first block is untested.
+- **Why the depth table is non-monotonic.** Quotient 1 maps to 5-bit, the same as every quotient above
+  5 (§3.4). A deliberate floor and a dead entry look identical here.
+- **What reads tag 38.** The record is understood — id, name without a terminator, a constant zero —
+  but the tag is not in the public list, so its consumer is unknown.
+- **Whether the ADPCM factor of two** is deliberate headroom or a units error. The tables and the jump
+  table are read now (§3.4); the intent is not.
 - **What `MFLV` denotes on import.** It is a codec key in the filter list, not a container this build
   produces — no signature is written anywhere in the image. Which decoder the key resolves to, and
   whether the QuickTime backend can take an FLV stream at all, is untested.

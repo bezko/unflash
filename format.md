@@ -163,7 +163,9 @@ Later versions add: 69 `FileAttributes`, 70 `PlaceObject3`, 71 `ImportAssets2`,
 87 `DefineBinaryData`, 88 `DefineFontName`, 89 `StartSound2`,
 90 `DefineBitsJPEG4`, 91 `DefineFont4`, 93 `EnableTelemetry`.
 
-Gaps (25, 27, 29–31, 38, 40–42, 44, 47, 72) are unused or internal-only.
+Gaps (25, 27, 29–31, 38, 40–42, 44, 47, 72) are unused or internal-only. Tag 38 is the
+exception: Flash MX's own writer emits it (id, length-prefixed name, a zero byte), so it is
+internal rather than unused.
 
 ### 5.1 What a plain authored movie actually contains
 
