@@ -378,13 +378,13 @@ Spark.
 No AAC, no ADPCM-with-alpha, no 8/48 kHz, and the speech codec has no name beyond "Speech sound".
 The encoder-compression set is exactly: none, ADPCM 2–5 bit, MP3 8–160 kbps.
 
-### 5.3 Streaming sound exists but cannot be validated
+### 5.3 Streaming sound is written but unverified
 
-There is a head writer after all (`FUN_007a3470`, §3.6), plus five block emitters, all reached from
-the frame sound compiler. What cannot be checked is whether the emitted head is *complete*: its only
-call site passes a null configuration, so the output is a tag 45 whose entire body is one zero byte.
-No shipped movie contains tags 18, 19 or 45, and the authoring tool was not asked to export a
-streaming-sound movie here, so there is nothing to compare the bytes against.
+There is a head writer (`FUN_007a3470`, §3.6) and five block emitters, all reached from the frame
+sound compiler, and the head call receives a real configuration. What is *not* verified is whether
+the resulting stream is self-consistent: nothing here exercises a streaming export, and no shipped
+movie contains tags 18, 19 or 45, so there is no sample to compare the head against the blocks it
+frames.
 
 ### 5.4 No capture path in the exporter
 
