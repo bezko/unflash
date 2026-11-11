@@ -141,7 +141,7 @@ Three observations worth keeping:
 The non-MP3 branch (`0x7a2f89` onward) does arithmetic before it writes anything:
 
 ```
-cmp [writer+0x240],4          ; the writer's SWF version field (see SWR_WRITER_API §2)
+cmp [writer+0x240],4          ; the writer's SWF version field (see the writer API reference, §2)
 cmp version,0x11
 mov edx,(flags>>2)&3          ; SoundRate, 2 bits
 cmp [edx*4+0xaf7f8c],0x1588   ; rate table; 0x1588 = 5512 = the 5.5 kHz entry
