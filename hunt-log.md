@@ -676,3 +676,20 @@ sits at `0x78f000`-`0x79f000`, the writer at `0x7a0000`.
 - Method note: ASCII-only search misses this whole layer. `Macromedia Flash Video` has zero ASCII
   occurrences in Flash.exe and five as UTF-16; for UI and error text a negative ASCII result is not
   evidence of absence.
+
+## 33. Auditing the absence claims
+
+- Fixed: the home card said the streaming head is "never written". It is - `FUN_007a3470`, called as
+  `FUN_007a3470(FUN_0077cd20(rateA, rateB), &config, code)`. `FUN_0077cd20` is a 63-byte merge of two
+  SoundRate fields, `(a | b) & ~0xc | max(a & 0xc, b & 0xc)`. My "null config" reading came from
+  `push ebx` x3 in the raw listing; that sequence is a fallback branch which `jmp 0x653022` skips.
+- The writer page's "absent everywhere: 38 40 49 51 52" is a *corpus* statement, and the paragraph
+  under it already says a corpus absence is not evidence about emitter reachability. Emitters for
+  0x28/0x31/0x33/0x34 do exist (`0x7a4390`, `0x7a4460`, `0x7a4540`, `0x7a459d`), so nothing to fix -
+  the guard was written correctly the first time.
+- `ASSetPropFlags`: rechecked in both encodings, 0 ASCII and 0 UTF-16. Claim stands.
+- `Nellymoser`: 0 ASCII, 0 UTF-16 in the binary, but the shipped credits page names it ("licensed from
+  Nellymoser, Inc."), so "never called by name" is precise about code only.
+- `On2`: the lone byte hit sits inside a `call rel32` operand, not a codec name.
+- `FLV`: no version-1 signature and no `MFLV` immediate anywhere in the image; `MFLV` exists only in
+  the UTF-16 import filter list. This build does not write an FLV container.

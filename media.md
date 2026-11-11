@@ -225,10 +225,17 @@ the MP3 quality ladder (`thunk_FUN_0067b2a0` is called with `code - 6`); and any
 a third path that writes the format byte `0x60` — or `0x50` when the code is exactly 19 — the ids the
 SWF 6 speech format occupies.
 
-Its only caller passes the zero selector (`0x653026`), so what this build emits there is tag 45 with a
-one-byte zero body. Whether that is a deliberate placeholder head or an argument I have mis-assigned
-across the stack frame is unresolved (§6), and the corpus cannot settle it: none of the 62 shipped
-movies contains tag 18, 19 or 45.
+Its only caller is in `FUN_00652e00` (`0x653026`), and it does **not** pass zeros: the decompiled call
+is `FUN_007a3470(FUN_0077cd20(rateA, rateB), &config, code)`, where `FUN_0077cd20` is a 63-byte merge
+of two rate fields — `(a | b) & ~0xc | max(a & 0xc, b & 0xc)`, keeping the higher `SoundRate` bit-pair
+— and `&config` is a stack struct filled immediately before. The all-zero argument sequence I read in
+the raw disassembly (`push ebx` three times) belongs to a fallback branch that `jmp 0x653022`
+short-circuits; the decompiler shows the arguments that actually reach the call. The head's
+`if (config == NULL) putbyte(0)` branch therefore fires only when that config is genuinely absent.
+
+So streaming sound is written head-and-blocks; the open question is narrower than before — not "is
+there a head" but "does the merged flags word produce a head consistent with the blocks". None of the
+62 shipped movies contains tag 18, 19 or 45, so there is still no sample to check it against.
 
 ### 3.7 Version refusals are user-visible strings
 
@@ -238,7 +245,9 @@ movies contains tag 18, 19 or 45.
 ```
 
 The second names a codec the binary never calls by name: **"Nellymoser" has zero occurrences** in
-either encoding. In this build the SWF 6 speech codec is only ever "Speech sound", and its message
+either encoding. The shipped help credits page does name it — `Help/Flash/html/90cred2.html`,
+"Speech compression and decompression technology licensed from Nellymoser, Inc." — so the codec is
+present and licensed, just never named in code. In this build the SWF 6 speech codec is only ever "Speech sound", and its message
 gates it below version 6 like MP3.
 
 Note the disagreement in the first message: it says **4**, while the `DefineSound` gate at `0x7a2f48`
@@ -298,6 +307,10 @@ QuickTime/DirectShow/MPEG/DV identifiers for the same job, and `[` is the separa
 instead of `|` after the FourCC list. The Spark Pro URL in the same string is the codec-licence
 prompt; the neighbouring string ` try import via QuickTime?` is the fallback offer shown when the
 DirectShow side has no decoder for a stream.
+
+This build never writes such a file: the `FLV` version-1 signature and an `MFLV` immediate are both
+absent from the whole image, so both names exist only on the import side, where they are matched
+against the extension and the codec keys above.
 
 Two filters in the same block matter above: `Windows Media (*.asf,*.wmv)` is importable although
 nothing here encodes those codecs, and `Video for Windows (*.avi)|*avi` ships with its dot missing —
@@ -405,16 +418,16 @@ even though its `<string>` reference entries cover only some of them.
 
 ## 6. Open questions
 
-- **What the head's null-configuration call means.** `FUN_007a3470` is called from `0x653026` with a
-  zero selector and a null config, producing a truncated head; either the real configuration arrives
-  through the four-argument call just before it (which builds a struct on the stack that I have not
-  fully resolved), or streaming-sound export is unfinished in this build.
+- **Whether the head's flags match its blocks.** The call itself is understood now (§3.6): a merged
+  rate word, a config struct, a codec code. What stays unverified is whether that combination writes a
+  self-consistent stream, because no sample carries tags 18, 19 or 45.
 - **Why 5.5 kHz is special-cased** in both `DefineSound` (`0x7a2fb6`) and the head writer
   (`0x7a34da`), leaving the arithmetic path whenever the rate is not 5512 Hz.
 - **Whether the ADPCM factor of two** is deliberate headroom or a units error. The tables and the
   jump table are read now (§3.4); the intent is not.
 - **What tag 38's `UI8` selects** (0, 1, 2) and why a video record exists beside tag 60.
-- **What `MFLV` is on disk.** The FourCC and the FLV filter exist and it is grouped with the other
-  well-known codec identifiers, but no shipped sample uses it, so the container layout is unverified.
+- **What `MFLV` denotes on import.** It is a codec key in the filter list, not a container this build
+  produces — no signature is written anywhere in the image. Which decoder the key resolves to, and
+  whether the QuickTime backend can take an FLV stream at all, is untested.
 - **Whether the QuickTime backend can decode FLV** or only hands it to DirectShow. The ` try import
   via QuickTime?` string shows the fallback is offered; no decoder load was observed.

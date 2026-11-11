@@ -45,8 +45,8 @@ itself as an observation or an inference.
   <li>
     <h3>Video &amp; audio</h3>
     <p>What the exporter really does with sound and video: a statically linked MPEG Layer-3
-    encoder, a DirectShow/H.263 import graph, ADPCM chosen by arithmetic, and the streaming
-    head tag that is never written.</p>
+    encoder, a DirectShow/H.263 import graph, ADPCM depth chosen by arithmetic, and a
+    sound-stream head whose tag number is computed rather than pushed.</p>
     <a href="{{ '/media/' | relative_url }}">Read →</a>
   </li>
   <li>
