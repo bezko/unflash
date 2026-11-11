@@ -653,3 +653,26 @@ sits at `0x78f000`-`0x79f000`, the writer at `0x7a0000`.
   (`0xedf6f0`-`0xedf8dc`, `0xee5ab4`), so scripts reference them while the exporter has no capture
   path. The Actions panel's `<object id="..."/>` block (`0xf59980`) names 24 objects, twelve of them
   with no `<string>` entries - a correction to the ActionScript page's object inventory.
+
+## 32. The streaming head was there; and two retractions
+
+- `FUN_007a3470` writes the head the last round called missing. Its tag is arithmetic, not a push:
+  `neg eax / sbb eax,eax / and al,0xe5 / add eax,0x2d` gives 45 for a zero selector and 18
+  otherwise - `SoundStreamHead2` against `SoundStreamHead`. A byte scan for `push 0x12`/`push 0x2d`
+  could never have found it, which is the failure mode the earlier census was already warning about.
+- It is reached once, from `0x653026` inside `FUN_00652e00` - the frame sound compiler that also owns
+  all five tag-19 emitters - and that call passes the zero selector with a null config, so the emitted
+  body is a single zero byte. Complete or placeholder: unresolved.
+- The ADPCM tables read cleanly now: `0xaf7f8c` = 5512/11025/22050/44100 Hz; `0xaf8888` = per-SWF-
+  version bitrate, v6 8000 through v17 160000 bps with v0-v5 zero; quotient `2*bitrate/(rate*channels)`;
+  jump table `0x7a3334` -> 2/5/2/3/4/5. The table's end is why MP3 stops at SWF 17 - version 18 would
+  index past it.
+- Two corrections to the previous round. The FourCC is `MFLV`, not `MFXV`. And the MP3 refusal message
+  says "less than 4" while the code gate is 6: the string belongs to the writer's header version at
+  `+0x240`, the gate to the target version argument.
+- Import filters verbatim, all UTF-16 in `.rsrc`: `WAV Sound (*.wav)`, `QuickTime Movie (*.mov)`,
+  `Video for Windows (*.avi)|*avi` (dot missing in the shipped pattern), `MPEG Movie (*.mpg,*.mpeg)`,
+  `Digital Video (*.dv, *.dvi)`, `Windows Media (*.asf,*.wmv)`, `Macromedia Flash Video (*.flv)`.
+- Method note: ASCII-only search misses this whole layer. `Macromedia Flash Video` has zero ASCII
+  occurrences in Flash.exe and five as UTF-16; for UI and error text a negative ASCII result is not
+  evidence of absence.

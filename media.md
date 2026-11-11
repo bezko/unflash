@@ -26,8 +26,8 @@ anything else is labelled inference. Companions: [the format reference]({{ '/for
 | **SWF output** — what reaches the movie | tag emitters in `.text` | disassembly at each `beginTag` call |
 
 The three do not agree. The import layer accepts `*.avi`, `*.mov`, `*.mpg`, `*.dv` and `*.flv`, but
-the writer has exactly one video codec path, and no literal `SoundStreamHead` emitter exists at all
-(§5.3).
+the writer has exactly one video codec path, and the streaming-sound head is written by an emitter
+whose tag number is computed rather than literal (§3.6).
 
 ---
 
@@ -42,8 +42,8 @@ the writer has exactly one video codec path, and no literal `SoundStreamHead` em
 | SWF sound compression | ADPCM 2/3/4/5-bit, MP3 8–160 kbps, none | sound-export option list §3.1 |
 | SWF video codec | H.263 (Sorenson Spark) only | `CVideoImport::H263Player`/`H263Consumer`; no VP6 strings |
 | Video in SWF below version 6 | refused, object dropped | `cmp [ebp+0x110],5` at `0x6591d2` |
-| MP3 in SWF below version 6 | refused | `cmp ebx,6 / jl` at `0x7a2f48` |
-| Streaming sound head tag (18/45) | **no emitter found** | §5.3 |
+| MP3 in SWF outside 6–17 | refused | `0x7a2f48`, `0x7a2f4d`; budget table ends at 17 |
+| Streaming sound head tag (18/45) | yes — one emitter, tag computed | `FUN_007a3470`, §3.6 |
 | Camera / microphone capture | no authoring path | player-side natives only, §5.5 |
 
 ---
@@ -131,8 +131,9 @@ put16(0)                ; SeekSamples = 0, always
 Three observations worth keeping:
 
 - **`SeekSamples` is hard-wired to zero.** A re-encoder would need it; this one never sets it.
-- **The MP3 version window is `[6, 17]`**, both ends enforced. Above 17 the writer falls out of the
-  MP3 branch, which is odd for a tool that can write higher versions elsewhere.
+- **The MP3 version window is `[6, 17]`**, both ends enforced — and it is not arbitrary: the writer
+  reads its bitrate budget from `[version*4 + 0xaf8888]`, a table whose entries run from version 6
+  to version 17 (§3.4). A higher version would index past its end.
 - **The format dispatch is a nibble test, not an enum compare**: `(flags & 0xf0) == 0x20`. The low
   nibble (rate/size/type) rides along untouched.
 
@@ -146,18 +147,30 @@ cmp version,0x11
 mov edx,(flags>>2)&3          ; SoundRate, 2 bits
 cmp [edx*4+0xaf7f8c],0x1588   ; rate table; 0x1588 = 5512 = the 5.5 kHz entry
 mov eax,[edx*4+0xaf7f8c]      ; rate value
-mov ebx,[version*4+0xaf8888]  ; per-version budget table
-lea ebx,[ebx+ebx] ; idiv     ; quotient
+mov ebx,[version*4+0xaf8888]  ; bitrate budget for this SWF version
+lea ebx,[ebx+ebx] ; idiv      ; 2 * bitrate / (rate * channels)
 cmp eax,5 ; ja  -> depth 5
 jmp [eax*4+0x7a3334]          ; cases 2,3,4,5
 ```
 
-So the ADPCM bit depth (2–5 bits) is derived from a rate table, a per-version table and a division,
-then passed to the ADPCM writer at `0x418b83`. **Inference:** the quotient is a bit budget (bits per
-sample the container can afford at that rate) and the depth is the largest of 2–5 that fits — the
-mechanics are observed, the intent is not. What is *not* true is the natural assumption that the
-"2/3/4/5 bit ADPCM" dropdown value is written straight through: no path takes a depth from the
-sound object's format byte.
+So the ADPCM bit depth (2–5 bits) is derived from the sample rate, the channel count and a
+per-version bitrate budget, then passed to the ADPCM writer at `0x418b83`. Both tables are now read
+as data rather than inferred:
+
+```
+0xaf7f8c  SoundRate -> Hz     5512  11025  22050  44100
+0xaf8888  SWF version -> bps  v6 8000   v7 16000  v8 20000   v9 24000  v10 32000  v11 48000
+                              v12 56000 v13 64000 v14 80000  v15 112000 v16 128000 v17 160000
+                              (v0–v5 are zero)
+```
+
+The quotient is `2 × bitrate(version) / (sampleRate × channels)` — a bits-per-sample figure with a
+factor of two in it — and the six-entry jump table at `0x7a3334` maps it to a depth: index 0 and 2 to
+2-bit, 3 to 3-bit, 4 to 4-bit, 1 and 5 to 5-bit, with anything above 5 clamped to 5. **Inference:**
+the doubling reads like deliberate headroom, but a units error would look identical here; what is
+certain is that the depth comes from the rate and the version, and never from the dialog's dropdown
+value. The 5.5 kHz entry is additionally tested on its own (`0x7a2fb6`), and when the rate is not
+5512 Hz and the writer's header version is ≥ 4, control leaves the arithmetic path entirely.
 
 ### 3.5 `StartSound` (15): `0x653e07`
 
@@ -176,35 +189,62 @@ The `SoundInfo` flags are packed by shifting through a 4-entry table at `0xaf7f9
 SyncType/SyncStop/loop-count byte is assembled bitwise. `DefineButtonSound` (17) has its own site at
 `0x658d93`.
 
-### 3.6 Streaming: five block emitters, no head
+### 3.6 Streaming: a computed head, five block emitters
 
 Tag 19 `SoundStreamBlock` is emitted from five places, all in the `0x7a38f0`–`0x7a3f20` range:
 
-| site | notes |
-|---|---|
-| `0x7a390d` | builds a `CString` at `[obj+0x244]` with size `[obj+0x24c]`, writes it as the payload |
-| `0x7a3a15` | **empty block** — `put16(0); put16(0)` then `endTag` |
-| `0x7a3ab1`, `0x7a3dc5`, `0x7a3f15` | same family as the first |
+| site | function | what it writes |
+|---|---|---|
+| `0x7a390d` | `FUN_007a38f0` | payload size from `[obj+0x24c]` (or `rate × channels`), then the block data |
+| `0x7a3a15` | `FUN_007a3a10` | **empty block** — `put16(0); put16(0)`, then `endTag` |
+| `0x7a3ab1` | `FUN_007a3a70` | running frame counter at `[obj+0x2c4]`, sample offset at `[obj+0x2cc]`, then data |
+| `0x7a3dc5` | `FUN_007a3dc0` | opens the tag and parks a back-pointer at `[obj+0x1c]` for a later fill |
+| `0x7a3f15` | `FUN_007a3f10` | `beginTag(0x13,1)` immediately followed by `endTag` |
 
-The second one is a stub: a ten-byte tag whose entire body is two zero words. It exists to advance
-the stream timeline during silent frames — **inference**, since nothing branches on it.
+All five are called from **one** function, `FUN_00652e00` — the frame sound compiler, which also
+performs the version refusals of §3.7.
 
-**No `SoundStreamHead` (18) or `SoundStreamHead2` (45) emitter exists as a literal.** A scan of
-every `push 0x12` and `push 0x2d` byte pair in `.text` found none that reaches `beginTag`
-(`0x413afc`) within 12 bytes, while the same scan finds all five tag-19 sites, tag 14, tag 60 and
-tag 61. Either the head is composed through a computed code expression, or this build does not write
-one — the corpus is no help, because none of the 62 shipped movies contains tag 18, 19 or 45.
+The head, which the previous round reported as missing, is **`FUN_007a3470`**, and its tag number is
+computed from an argument rather than pushed:
+
+```
+mov eax,arg                  ; tag selector
+neg eax ; sbb eax,eax        ; 0 stays 0, non-zero becomes -1
+and al,0xe5                  ; -1 & 0xe5 = 0xe5
+add eax,0x2d                 ; 0x2d = 45, or 0xe5 + 0x2d = 0x12 = 18
+call beginTag                ; long-form flag = 0, so the short header
+```
+
+A zero selector writes **tag 45 `SoundStreamHead2`**; a non-zero selector writes **tag 18
+`SoundStreamHead`**, the older form without MP3 fields. That is the split the SWF 6 format
+description makes, arrived at by arithmetic instead of two code paths — which is why a scan for the
+literals `0x12` and `0x2d` never found it.
+
+The body then branches on a codec code at `[+0x27c]`: 2–5 are the ADPCM depths from §3.4; 6–17 index
+the MP3 quality ladder (`thunk_FUN_0067b2a0` is called with `code - 6`); and anything above 17 takes
+a third path that writes the format byte `0x60` — or `0x50` when the code is exactly 19 — the ids the
+SWF 6 speech format occupies.
+
+Its only caller passes the zero selector (`0x653026`), so what this build emits there is tag 45 with a
+one-byte zero body. Whether that is a deliberate placeholder head or an argument I have mis-assigned
+across the stack frame is unresolved (§6), and the corpus cannot settle it: none of the 62 shipped
+movies contains tag 18, 19 or 45.
 
 ### 3.7 Version refusals are user-visible strings
 
 ```
-"MP3 sound codec not supported in SWF versions less than 6"
+"MP3 sound codec not supported in SWF versions less than 4"
 "Speech sound codec not supported in SWF versions less than 6"
 ```
 
 The second names a codec the binary never calls by name: **"Nellymoser" has zero occurrences** in
 either encoding. In this build the SWF 6 speech codec is only ever "Speech sound", and its message
 gates it below version 6 like MP3.
+
+Note the disagreement in the first message: it says **4**, while the `DefineSound` gate at `0x7a2f48`
+is **6**. The 4 belongs to the writer's own header version at `+0x240`, which the non-MP3 branch
+tests first (`0x7a2fa0`) — two different notions of "version" meet in that one function, and the
+string records the older one.
 
 ---
 
@@ -245,18 +285,23 @@ Digital Video (*.dv,*.dvi)|*.dv;*.dvi
 QuickTime (*.mov)|*.mov
 ```
 
-and in the codec-download list (`0xf80aa2`):
+and in the codec-download list (`0xf80aa2`, UTF-16 in `.rsrc`):
 
 ```
-Video Formats:|MooV;VfW ;MPG ;dvc!;MFXV[*.mov;*.avi;*.mpg;*.dv;*.flv
-http://www.sorenson.com/sparkpro
+All Video Formats|*.avi;*.mpg;*.mpeg;*.mov;*.dv;*.asf;*.wmv;*.flv
+All Video Formats|MooV;VfW ;MPG ;dvc!;MFLV[*.mov;*.avi;*.mpg;*.dv;*.flv http://www.sorenson.com/sparkpro
 ```
 
-`MFXV` is the FourCC this tool registers for its own FLV variant; the Spark Pro URL in the same
-string is the codec-licence prompt that appears when QuickTime cannot decode the stream natively.
+`MFLV` is the FourCC at the end of the second list — this tool's own FLV variant, one letter away from
+the `FLV ` it puts in a file-name filter. The `MooV`/`VfW`/`MPG`/`dvc!` entries beside it are the
+QuickTime/DirectShow/MPEG/DV identifiers for the same job, and `[` is the separator this string uses
+instead of `|` after the FourCC list. The Spark Pro URL in the same string is the codec-licence
+prompt; the neighbouring string ` try import via QuickTime?` is the fallback offer shown when the
+DirectShow side has no decoder for a stream.
 
-The FLV association is also in the registry block: `…\Software\Macromedia\Flash\6` with `.flv`
-mapped to `Flash.Movie`.
+Two filters in the same block matter above: `Windows Media (*.asf,*.wmv)` is importable although
+nothing here encodes those codecs, and `Video for Windows (*.avi)|*avi` ships with its dot missing —
+the Win32 dialog matches anything ending in `avi`, not in `.avi`.
 
 Encoder settings exposed in the dialog, as strings: `Compress video`, `Smooth`, `Quality:`,
 `Keyframe interval:`, `Video Format:`, `Maintain aspect ratio`,
@@ -320,10 +365,13 @@ Spark.
 No AAC, no ADPCM-with-alpha, no 8/48 kHz, and the speech codec has no name beyond "Speech sound".
 The encoder-compression set is exactly: none, ADPCM 2–5 bit, MP3 8–160 kbps.
 
-### 5.3 No streaming head
+### 5.3 Streaming sound exists but cannot be validated
 
-See §3.6. Tag 19 blocks without a tag 18/45 head are unparseable as a stream; if this build can
-export streaming sound, the head is written somewhere the literal scan did not reach.
+There is a head writer after all (`FUN_007a3470`, §3.6), plus five block emitters, all reached from
+the frame sound compiler. What cannot be checked is whether the emitted head is *complete*: its only
+call site passes a null configuration, so the output is a tag 45 whose entire body is one zero byte.
+No shipped movie contains tags 18, 19 or 45, and the authoring tool was not asked to export a
+streaming-sound movie here, so there is nothing to compare the bytes against.
 
 ### 5.4 No capture path in the exporter
 
@@ -357,13 +405,16 @@ even though its `<string>` reference entries cover only some of them.
 
 ## 6. Open questions
 
-- **Where the streaming head is written.** Five tag-19 emitters, no tag 18 or 45 anywhere as a
-  literal. Either a computed code or a path not yet examined.
+- **What the head's null-configuration call means.** `FUN_007a3470` is called from `0x653026` with a
+  zero selector and a null config, producing a truncated head; either the real configuration arrives
+  through the four-argument call just before it (which builds a struct on the stack that I have not
+  fully resolved), or streaming-sound export is unfinished in this build.
+- **Why 5.5 kHz is special-cased** in both `DefineSound` (`0x7a2fb6`) and the head writer
+  (`0x7a34da`), leaving the arithmetic path whenever the rate is not 5512 Hz.
+- **Whether the ADPCM factor of two** is deliberate headroom or a units error. The tables and the
+  jump table are read now (§3.4); the intent is not.
 - **What tag 38's `UI8` selects** (0, 1, 2) and why a video record exists beside tag 60.
-- **Whether the ADPCM depth decision is a bitrate fit.** The division and the 2–5 jump table are
-  observed; the meaning of the two tables is not.
-- **Why the MP3 branch stops at SWF 17** while the rest of the writer supports higher versions.
-- **What `MFXV` is on disk.** The FourCC and the FLV export filter exist; no shipped sample uses
-  either, so the container layout is unverified.
-- **Whether the QuickTime backend can decode FLV** or only hands it to DirectShow — the Spark Pro
-  URL hints at a third-party component, but no load of one was observed.
+- **What `MFLV` is on disk.** The FourCC and the FLV filter exist and it is grouped with the other
+  well-known codec identifiers, but no shipped sample uses it, so the container layout is unverified.
+- **Whether the QuickTime backend can decode FLV** or only hands it to DirectShow. The ` try import
+  via QuickTime?` string shows the fallback is offered; no decoder load was observed.
