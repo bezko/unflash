@@ -621,3 +621,35 @@ sits at `0x78f000`-`0x79f000`, the writer at `0x7a0000`.
 - Negative: `ASSetPropFlags`, `isPropertyEnumerable`, `propertyIsEnumerable` and `isPrototypeOf`
   have zero occurrences in the image - ASCII, UTF-16 and reference XML alike, so the authoring
   engine is a subset of the player's AVM1.
+
+## 31. Video and audio: a bundled MP3 encoder, a DirectShow H.263 importer, and no streaming head
+
+- Audio import accepts WAV, AIFF, N.AIFF and MP3; export writes WAV and the SWF holds ADPCM 2-5 bit
+  or MP3 8-160 kbps at 5/11/22/44 kHz. The sound dialog's option lists are in `.rsrc` twice.
+- A full ISO MPEG Layer-3 encoder is statically linked, built from a Flash 4-era tree
+  (`C:\proj\flash4\mp3encoder\core\bitmux\enc\l3\bit_fram.c`, `...\psych\enc\l3\psymain.c`);
+  its own messages survive (`bitrates > 320000 not supported by ISO MPEG Layer-3`, `non-ISO bitrate`,
+  `only mono and stereo case implemented`). A matching decoder (`mp3dec`) is present for auditioning.
+- `DefineSound` (14) at `0x7a2ed0`: tag 14 long form, `put16(id)`, then `(flags & 0xf0) == 0x20`
+  selects MP3, which requires SWF version 6-17 (`0x7a2f48`, `0x7a2f4d`); the body is
+  `putbyte(flags)`, `put32(SampleCount)`, `put16(0)` (`SeekSamples` always zero), then the data block.
+- ADPCM depth is **computed**: rate table `0xaf7f8c` (holds `0x1588` = 5512 Hz) and a per-version
+  table `0xaf8888` feed a division whose quotient indexes a 2/3/4/5 jump table at `0x7a3334`, passed
+  to the ADPCM writer `0x418b83`. No path takes the depth from the sound object.
+- `StartSound` (15) at `0x653e07` packs `SoundInfo` by shifting through a table at `0xaf7f9c`.
+- Tag 19 `SoundStreamBlock` has five sites (`0x7a390d`, `0x7a3a15`, `0x7a3ab1`, `0x7a3dc5`,
+  `0x7a3f15`); the one at `0x7a3a15` emits an **empty** block (`put16(0); put16(0)`).
+  **No `SoundStreamHead` (18) or `SoundStreamHead2` (45) emitter exists**: every `push 0x12` /
+  `push 0x2d` byte pair in `.text` was checked for a reachable `beginTag`, and the same scan does
+  find tags 14, 19, 60 and 61.
+- Video import is a real DirectShow filter graph (`CBaseFilter`, `CBasePin`, `CMediaGrabber`,
+  `UIMemInputPin` linked in) with a QuickTime backend, both under a `CVideoImport` namespace, plus
+  `H263Player`/`H263Consumer` and a `VanillaConsumer` passthrough. Filters: FLV, AVI, MPEG, DV, MOV;
+  `MFXV` is this tool's own FourCC. No VP6 and no Screen-video strings anywhere.
+- `DefineVideoStream` (60) still maps codec `1->1, 2->2, else 0`; the version gate `[+0x110] > 5`
+  stands. `VideoFrame` (61) at `0x653fcd` writes `(streamId, frameNumber, payload)` and increments the
+  frame counter even when it writes nothing.
+- The player inside the tool does have `Camera`, `Microphone` and `NetStream` natives
+  (`0xedf6f0`-`0xedf8dc`, `0xee5ab4`), so scripts reference them while the exporter has no capture
+  path. The Actions panel's `<object id="..."/>` block (`0xf59980`) names 24 objects, twelve of them
+  with no `<string>` entries - a correction to the ActionScript page's object inventory.

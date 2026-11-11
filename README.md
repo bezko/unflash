@@ -13,6 +13,7 @@ Published at **https://bezko.github.io/unflash/**.
 | [The SWF file format](https://bezko.github.io/unflash/format/) | A working description of the SWF container, written as the reference for reading what this writer emits. |
 | [Recovered writer API](https://bezko.github.io/unflash/writer/) | The exporter's object, its primitives, the tag map, and the undocumented tags. |
 | [ActionScript](https://bezko.github.io/unflash/actionscript/) | The authoring tool's ActionScript engine: the documented core-object surface and the undocumented features beside it. |
+| [Video & audio](https://bezko.github.io/unflash/media/) | The media side of the exporter: import formats, bundled codecs, and the sound/video tags it emits. |
 | [Hunt log](https://bezko.github.io/unflash/hunt-log/) | Chronological record of the analysis: what was tried, what failed, what each address turned out to be. |
 
 ## Method, in one paragraph

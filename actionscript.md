@@ -72,10 +72,16 @@ align          movie alignment: centered(C), top(T), top-left(TL), ...
 `align` and `showMenu` are marked `object=""` — they are host-behaviour switches, not library
 functions, and their reference text reads like a preference description rather than a call signature.
 
-**Coverage caveat.** Seventeen objects is not the whole language: `Key`, `Mouse`, `Selection`,
-`Stage`, `System`, `ContextMenu` and `SharedObject` have no entries in this file. Either the panel
-sources them elsewhere or the authoring build's reference set predates them; nothing here proves
-which.
+**Coverage caveat.** Seventeen objects is not the whole language. The same XML carries a separate
+`<object id="…"/>` declaration block (`0xf59980`–`0xf59be0`) naming 24 objects: `Date`, `Math`,
+`Number`, `Object`, `String`, `Button`, `Camera`, `Color`, `Key`, `Microphone`, `Mouse`,
+`MovieClip`, `Selection`, `Sound`, `Stage`, `System`, `TextField`, `LoadVars`, `NetConnection`,
+`NetStream`, `SharedObject`, `XML`, `XMLSocket`, `CustomActions`. Twelve of them carry `<string>`
+entries; twelve are declared with none — `Math`, `Camera`, `Key`, `Microphone`, `Mouse`,
+`Selection`, `Stage`, `System`, `NetConnection`, `NetStream`, `SharedObject`, `CustomActions`. In
+the other direction, five objects with entries — `TextFormat`, `Array`, `Capabilities`, `Function`,
+`Boolean` — have no declaration in that block. The file is two overlapping lists, neither
+complete, so the panel's object inventory cannot be read off the entry count.
 
 ---
 

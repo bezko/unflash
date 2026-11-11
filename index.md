@@ -43,6 +43,13 @@ itself as an observation or an inference.
     <a href="{{ '/actionscript/' | relative_url }}">Read →</a>
   </li>
   <li>
+    <h3>Video &amp; audio</h3>
+    <p>What the exporter really does with sound and video: a statically linked MPEG Layer-3
+    encoder, a DirectShow/H.263 import graph, ADPCM chosen by arithmetic, and the streaming
+    head tag that is never written.</p>
+    <a href="{{ '/media/' | relative_url }}">Read →</a>
+  </li>
+  <li>
     <h3>Hunt log</h3>
     <p>The chronological record: the false starts, the thunk problem, the corpus
     checks, and what each suspicious address turned out to be.</p>
